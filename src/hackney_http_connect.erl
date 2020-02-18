@@ -19,8 +19,6 @@
   shutdown/2,
   sockname/1]).
 
--define(TIMEOUT, infinity).
-
 -type http_socket() :: {atom(), inet:socket()}.
 -export_type([http_socket/0]).
 
@@ -63,9 +61,9 @@ connect(ProxyHost, ProxyPort, Opts, Timeout)
   ConnectOpts = hackney_util:filter_options(Opts, AcceptedOpts, BaseOpts),
   
   %% connnect to the proxy, and upgrade the socket if needed.
-  case gen_tcp:connect(ProxyHost, ProxyPort, ConnectOpts) of
+  case gen_tcp:connect(ProxyHost, ProxyPort, ConnectOpts, Timeout) of
     {ok, Socket} ->
-      case do_handshake(Socket, Host, Port, Opts) of
+      case do_handshake(Socket, Host, Port, Opts, Timeout) of
         ok ->
           %% if we are connecting to a remote https source, we
           %% upgrade the connection socket to handle SSL.
@@ -149,7 +147,7 @@ sockname({Transport, Socket}) ->
   Transport:sockname(Socket).
 
 %% private functions
-do_handshake(Socket, Host, Port, Options) ->
+do_handshake(Socket, Host, Port, Options, Timeout) ->
   ProxyUser = proplists:get_value(connect_user, Options),
   ProxyPass = proplists:get_value(connect_pass, Options, <<>>),
   ProxyPort = proplists:get_value(connect_port, Options),
@@ -180,13 +178,13 @@ do_handshake(Socket, Host, Port, Options) ->
     <<"\r\n\r\n">>],
   case gen_tcp:send(Socket, Payload) of
     ok ->
-      check_response(Socket);
+      check_response(Socket, Timeout);
     Error ->
       Error
   end.
 
-check_response(Socket) ->
-  case gen_tcp:recv(Socket, 0, ?TIMEOUT) of
+check_response(Socket, Timeout) ->
+  case gen_tcp:recv(Socket, 0, Timeout) of
     {ok, Data} ->
       check_status(Data);
     Error ->
